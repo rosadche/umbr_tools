@@ -27,7 +27,9 @@ __license__ = "MIT"
 __maintainer__ = "Reilly Osadchey Brown"
 __email__ = "rosadche@bu.edu"
 
-from . import misc_fxs, reweight_fxs, umbr_1d, umbr_2d
+from . import umbr_1d, umbr_2d
+from .misc_fxs import
+from .reweight_fxs import
 
 __all__ = [
 
