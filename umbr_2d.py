@@ -387,6 +387,27 @@ class umbrella_set_2d(object):
             bin_edges = []
             bin_edges.append( xedges )
             bin_edges.append( yedges )
+            
+            non_zero_indices      = np.nonzero(hist_counts)
+            bins_nonzero          = len(non_zero_indices[0])
+            centers_x_nonzero     = centers_x[non_zero_indices[0]]
+            centers_y_nonzero     = centers_y[non_zero_indices[1]]
+            centers_nonzero       = np.vstack((centers_x_nonzero, centers_y_nonzero)).T
+            
+            if self.verbose:
+                print(f"{bins_nonzero:d} bins were populated out of {len(hist_counts.ravel())} (for full rectilinear 2d grid)")
+                for i in range(bins_nonzero):
+                    print(f"bin {i:>5} ({centers_nonzero[i][0]:6.1f}, {centers_nonzero[i][1]:6.1f}) {hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]:12f} conformations")
+            
+            
+            x_n = np.zeros([np.sum(N_k), 2])  # the configurations
+            Ntot = 0
+            for k in range(K):
+                for n in range(N_k[k]):
+                    x_n[Ntot, 0] = cv_x_kn[k, n]
+                    x_n[Ntot, 1] = cv_y_kn[k, n]
+                    Ntot += 1
+        
 
         # ------ Set Up For Final MBAR --------------------------------------------------------------
         # Evaluate reduced energies in all umbrellas
@@ -399,16 +420,12 @@ class umbrella_set_2d(object):
             self.u_kln,
             self.u_kn,
             self.beta_k,
-            self.cv_mat_kn,
-            self.restraint_k,
+            self.cv_x_kn,
+            self.restraint_x_k,
+            self.cv_y_kn,
+            self.restraint_y_k,
             self.b_kln,
         )
-
-        # compute bin centers
-        bin_center_i = np.zeros([self.nbins])
-        bin_edges = np.linspace(self.cv_min, self.cv_max, self.nbins + 1)
-        for i in range(self.nbins):
-            bin_center_i[i] = 0.5 * (bin_edges[i] + bin_edges[i + 1])
 
         N = np.sum(self.N_k)
         cv_n = pymbar.utils.kn_to_n(self.cv_mat_kn, N_k=self.N_k)
@@ -427,12 +444,12 @@ class umbrella_set_2d(object):
             print("Generating FES...")
         fes.generate_fes(
             self.u_kn,
-            cv_n,
+            x_n,
             fes_type="histogram",
             histogram_parameters=histogram_parameters,
         )
         results = fes.get_fes(
-            bin_center_i, reference_point="from-lowest", uncertainty_method="analytical"
+            centers_nonzero, reference_point="from-lowest", uncertainty_method="analytical"
         )
         center_f_i = self.kT * results["f_i"]
         center_df_i = self.kT * results["df_i"]
@@ -442,12 +459,9 @@ class umbrella_set_2d(object):
         text += f"# provided units: {self.units}" + "\n"
         text += f"# provided value for kB: {self.kB} {self.units}/K" + "\n"
         text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}" + "\n"
-        text += f"{'bin':>8s} {'f':>8s} {'df':>8s}" + "\n"
-        for i in range(self.nbins):
-            text += (
-                f"{bin_center_i[i]:8.3f} {center_f_i[i]:8.3f} {center_df_i[i]:8.3f}"
-                + "\n"
-            )
+        text += f"{'bin':>8s} {cv_col_x:>10s} {cv_col_y:>10s} {'N':>8s} {'f':>10s} {'df':>10s}" + "\n"
+        for i in range(bins_nonzero):
+            text += f"{i:>8d} {centers_nonzero[i][0]:>10.3f} {centers_nonzero[i][1]:>10.3f} {hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]:>8.0f} {f_i[i]:>10.3f} {df_i[i]:>10.3f}" + "\n"
 
         if self.verbose:
             print(text)
@@ -456,7 +470,7 @@ class umbrella_set_2d(object):
             f.write(text)
 
 
-class umbrella_collection_1d(object):
+class umbrella_collection_2d(object):
 
     """
     An Umbrella Collection is defined as any number of umbrella sets.
