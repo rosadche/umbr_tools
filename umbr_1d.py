@@ -10,7 +10,7 @@ import os
 import shutil
 
 from umbr_tools.misc_fxs import read_colvar
-from umbr_tools.reweighting_fxs import harmonic_umbrella_bias, eval_reduced_pot_energies
+from umbr_tools.reweighting_fxs import harmonic_umbrella_bias, eval_reduced_pot_energies_1d
 
 class umbrella_set_1d(object):
 
@@ -324,7 +324,7 @@ class umbrella_set_1d(object):
             print("Evaluating reduced potential energies...")
         # Set zero of u_kn -- this is arbitrary.
         self.u_kn -= self.u_kn.min()  # arbitrary up to a constant
-        eval_reduced_pot_energies(
+        eval_reduced_pot_energies_1d(
             self.N_k,
             self.u_kln,
             self.u_kn,
@@ -720,7 +720,7 @@ class umbrella_collection_1d(object):
             print("Evaluating reduced potential energies...")
         # Set zero of u_kn -- this is arbitrary.
         self.u_kn -= self.u_kn.min()  # arbitrary up to a constant
-        eval_reduced_pot_energies(
+        eval_reduced_pot_energies_1d(
             self.N_k,
             self.u_kln,
             self.u_kn,
