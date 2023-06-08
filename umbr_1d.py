@@ -25,14 +25,14 @@ class umbrella_set_1d(object):
 
     def umbr_harm(self, umbr_harm_locs, k):
         
-        if isinstance(umbr_harm_locs, list) or isinstance(umbr_harm_locs, np.ndarray):
+        if isinstance(umbr_harm_locs, (list, tuple, np.ndarray) ):
             self.umbr_harm_locs = umbr_harm_locs
             self.num_im = len(self.umbr_harm_locs)
         else:
             raise Exception("umbr_harm_locs must be an array/list!")
                 
         
-        if isinstance(k, list) or isinstance(k, np.ndarray):
+        if isinstance(k, (list, tuple, np.ndarray) ):
             if len(k) != self.num_im:
                 self.umbr_harm_ks = np.asarray(k)
             else:
@@ -57,7 +57,7 @@ class umbrella_set_1d(object):
             self.static_scale = 1.0
 
     def sim_temp(self, temp):
-        if isinstance(temp, list) or isinstance(temp, np.ndarray):
+        if isinstance(temp, (list, tuple, np.ndarray) ):
             if len(temp) != self.num_im:
                 self.temps = np.asarray(temp)
             else:
@@ -78,7 +78,7 @@ class umbrella_set_1d(object):
 
         if isinstance(files, str):
             self.cv_files = [files.format(i=x) for x in range(self.num_im)]
-        elif isinstance(files, list) or isinstance(files, np.ndarray):
+        elif isinstance(files, (list, tuple, np.ndarray)):
             if len(files) == self.num_im:
                 self.cv_files = files
             else:
@@ -207,7 +207,7 @@ class umbrella_set_1d(object):
         self.g = umbr_options["g"]
         self.g_k = np.zeros([self.K])  # statistical inefficiency of simulation k
         if self.g != None:
-            if isinstance(self.g, list) or isinstance(self.g, np.ndarray):
+            if isinstance(self.g, (list, tuple, np.ndarray) ):
                 if len(self.g) != self.K:
                     raise Exception(
                         "g as an array/list must be of same length as number of total windows!"
@@ -559,7 +559,7 @@ class umbrella_collection_1d(object):
         self.g = umbr_options["g"]
         self.g_k = np.zeros([self.K])  # statistical inefficiency of simulation k
         if self.g != None:
-            if isinstance(self.g, list) or isinstance(self.g, np.ndarray):
+            if isinstance(self.g, (list, tuple, np.ndarray) ):
                 if len(self.g) != self.K:
                     raise Exception(
                         "g as an array/list must be of same length as number of total windows!"

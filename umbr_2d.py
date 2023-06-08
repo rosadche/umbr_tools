@@ -28,7 +28,7 @@ class umbrella_set_2d(object):
     
     def umbr_harm(self, x_locs, y_locs, k_x, k_y):
             
-            if notisinstance(umbr_harm_locs, list) or isinstance(umbr_harm_locs, np.ndarray):
+            if not isinstance(umbr_harm_locs, (list, tuple, np.ndarray) ):
                 
             if x_locs.ndim != 1:
                 raise Exception('x_locs must be 1d arrray!')
@@ -42,7 +42,7 @@ class umbrella_set_2d(object):
             self.umbr_harm_y_locs = y_locs
             
             # Check both k_x and k_y
-            if isinstance(k_x, list) or isinstance(k_x, np.ndarray):
+            if isinstance(k_x, (list, tuple, np.ndarray) ):
                 if len(k_x) == self.num_im:
                     self.umbr_harm_kxs = np.asarray(k_x)
                 else:
@@ -50,7 +50,7 @@ class umbrella_set_2d(object):
             else:
                 self.umbr_harm_kxs = np.full(self.num_im, k_x)
             
-            if isinstance(k_y, list) or isinstance(k_y, np.ndarray):
+            if isinstance(k_y, (list, tuple, np.ndarray) ):
                 if len(k_y) != self.num_im:
                     self.umbr_harm_kys = np.asarray(k_y)
                 else:
@@ -75,7 +75,7 @@ class umbrella_set_2d(object):
             self.static_scale = 1.0
 
     def sim_temp(self, temp):
-        if isinstance(temp, list) or isinstance(temp, np.ndarray):
+        if isinstance(temp, (list, tuple, np.ndarray) ):
             if len(temp) != self.num_im:
                 self.temps = np.asarray(temp)
             else:
@@ -96,7 +96,7 @@ class umbrella_set_2d(object):
 
         if isinstance(files, str):
             self.cv_files = [files.format(i=x) for x in range(self.num_im)]
-        elif isinstance(files, list) or isinstance(files, np.ndarray):
+        elif isinstance(files, (list, tuple, np.ndarray) ):
             if len(files) == self.num_im:
                 self.cv_files = files
             else:
@@ -171,9 +171,17 @@ class umbrella_set_2d(object):
                 )
             
         if umbr_options["nbins"] == None:
-            self.nbins = 100
+            self.nbins = (25, 25)
         else:
-            self.nbins = umbr_options["nbins"]
+            if isinstance(umbr_options["nbins"], (list, tuple, np.ndarray)):
+                if len(umbr_options["nbins"]) != 2:
+                    raise Exception(
+                        "nbins must be a two dimensional list/array!"
+                    )
+                else:
+                    self.nbins = umbr_options["nbins"]
+            else:
+                raise Exception("nbins must be a list/array!")
 
         if umbr_options["pot_ener_col"] == None:
             self.pot_ener_col = None
@@ -225,7 +233,7 @@ class umbrella_set_2d(object):
         self.g = umbr_options["g"]
         self.g_k = np.zeros([self.K])  # statistical inefficiency of simulation k
         if self.g != None:
-            if isinstance(self.g, list) or isinstance(self.g, np.ndarray):
+            if isinstance(self.g, (list, tuple, np.ndarray) ):
                 if len(self.g) != self.K:
                     raise Exception(
                         "g as an array/list must be of same length as number of total windows!"
@@ -547,9 +555,17 @@ class umbrella_collection_1d(object):
 
         # Optional Arguements (Default Values)
         if umbr_options["nbins"] == None:
-            self.nbins = 100
+            self.nbins = (25, 25)
         else:
-            self.nbins = umbr_options["nbins"]
+            if isinstance(umbr_options["nbins"], (list, tuple, np.ndarray)):
+                if len(umbr_options["nbins"]) != 2:
+                    raise Exception(
+                        "nbins must be a two dimensional list/array!"
+                    )
+                else:
+                    self.nbins = umbr_options["nbins"]
+            else:
+                raise Exception("nbins must be a list/array!")
 
         if umbr_options["pot_ener_col"] == None:
             self.pot_ener_col = None
@@ -577,7 +593,7 @@ class umbrella_collection_1d(object):
         self.g = umbr_options["g"]
         self.g_k = np.zeros([self.K])  # statistical inefficiency of simulation k
         if self.g != None:
-            if isinstance(self.g, list) or isinstance(self.g, np.ndarray):
+            if isinstance(self.g, (list, tuple, np.ndarray) ):
                 if len(self.g) != self.K:
                     raise Exception(
                         "g as an array/list must be of same length as number of total windows!"
