@@ -23,12 +23,15 @@ class umbrella_set_1d(object):
     def __init__(self, name):
         self.name = name
 
-    def umbr_harm(self, min_val, max_val, num_im, endpoint, k):
-        self.num_im = num_im
-        self.umbr_harm_locs = np.linspace(
-            min_val, max_val, num=num_im, endpoint=endpoint
-        )
-
+    def umbr_harm(self, umbr_harm_locs, k):
+        
+        if isinstance(umbr_harm_locs, list) or isinstance(umbr_harm_locs, np.ndarray):
+            self.umbr_harm_locs = umbr_harm_locs
+            self.num_im = len(self.umbr_harm_locs)
+        else:
+            raise Exception("umbr_harm_locs must be an array/list!")
+                
+        
         if isinstance(k, list) or isinstance(k, np.ndarray):
             if len(k) != self.num_im:
                 self.umbr_harm_ks = np.asarray(k)
@@ -367,8 +370,8 @@ class umbrella_set_1d(object):
         # Write out free energy profile
         text = f"# free energy profile from histogramming" + "\n"
         text += f"# provided units: {self.units}" + "\n"
-        text += f"# provided value for kB: {self.kB} {self.units}/K"
-        text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}"
+        text += f"# provided value for kB: {self.kB} {self.units}/K" + "\n"
+        text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}" + "\n"
         text += f"{'bin':>8s} {'f':>8s} {'df':>8s}" + "\n"
         for i in range(self.nbins):
             text += (
