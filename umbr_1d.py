@@ -367,7 +367,7 @@ class umbrella_set_1d(object):
         # Write out free energy profile
         text = f"# free energy profile from histogramming" + "\n"
         text += f"# provided units: {self.units}" + "\n"
-        text += f"# provided value for kB: {self.kB}"
+        text += f"# provided value for kB: {self.kB} {self.units}/K"
         text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}"
         text += f"{'bin':>8s} {'f':>8s} {'df':>8s}" + "\n"
         for i in range(self.nbins):
@@ -763,7 +763,7 @@ class umbrella_collection_1d(object):
         # Write out free energy profile
         text = f"# free energy profile from histogramming" + "\n"
         text += f"# provided units: {self.units}" + "\n"
-        text += f"# provided value for kB: {self.kB} {self.units}" + "\n"
+        text += f"# provided value for kB: {self.kB} {self.units}/K" + "\n"
         text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}" + "\n"
         text += f"{'bin':>8s} {'f':>8s} {'df':>8s}" + "\n"
         for i in range(self.nbins):
