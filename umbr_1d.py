@@ -193,6 +193,8 @@ class umbrella_set_1d(object):
         # need to setup KT at outtemp
         self.kT = (self.kB * self.outtemp)
         
+        # need to get beta_k array:
+        self.beta_k = 1.0 / (self.temps * self.kB)
         # we want self.K but have self.num_im
         self.K = self.num_im
         
@@ -249,29 +251,25 @@ class umbrella_set_1d(object):
 
         # we will first just load in the data for all images
         for k in range(self.K):
-            set_id = self.K_digitize[k]
-            set_min_loc_in_K_digitize = np.where(self.K_digitize == set_id)[0][0]
-            image_in_set = k - set_min_loc_in_K_digitize
-            which_set = self.umbr_sets_keys[set_id]
 
             cv_details = np.asarray(
                 [
-                    self.dict_umbr_sets[which_set].umbr_harm_locs[image_in_set],
-                    self.dict_umbr_sets[which_set].umbr_harm_ks[image_in_set],
+                    self.umbr_harm_locs[k],
+                    self.umbr_harm_ks[k],
                 ]
             )
             self.restraint_k[k, :] = cv_details
 
-            if self.dict_umbr_sets[which_set].file_type == "colvar":
+            if self.file_type == "colvar":
                 df = read_colvar(
-                    self.dict_umbr_sets[which_set].cv_files[image_in_set],
+                    self.cv_files[k],
                     keep_zero=False,
                 )
-            if self.dict_umbr_sets[which_set].file_type == "df":
-                df = self.dict_umbr_sets[which_set].cv_files[image_in_set]
-            if self.dict_umbr_sets[which_set].file_type == "df_pkl":
+            if self.file_type == "df":
+                df = self.cv_files[k]
+            if self.file_type == "df_pkl":
                 df = pd.read_pickle(
-                    self.dict_umbr_sets[which_set].cv_files[image_in_set]
+                    self.cv_files[k]
                 )
             else:
                 raise Exception("This CV filetype has not been implemented!")
@@ -301,7 +299,7 @@ class umbrella_set_1d(object):
 
             if self.verbose:
                 print(
-                    f"set {which_set} image {image_in_set}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
+                    f"image {k}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
                 )
 
             if np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]]) < self.cv_min:
