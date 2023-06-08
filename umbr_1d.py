@@ -35,12 +35,17 @@ class umbrella_set(object):
         else:
             self.umbr_harm_ks = np.full(self.num_im, k)
 
-    def umbr_static(self, file=None, need_to_invert=False):
+    def umbr_static(self, file=None, need_to_invert=False, static_bias_col=None):
         """
+        If performing MBAR on the set only, please supply static_bias_col
+        If performing MBAR on a collection, please supply file, need_to_invert
+
         This just stores information, does not compute spline
         File must be the file used by PLUMED as external bias
         """
         self.umbr_static_file = file
+        self.static_bias_col = static_bias_col
+
         if need_to_invert == True:
             self.static_scale = -1.0
         else:
@@ -83,6 +88,301 @@ class umbrella_set(object):
             )
         else:
             self.file_type = file_type
+
+    def do_mbar(self, umbr_options=None, mbar_options=None):
+        """ """
+
+        # start with options
+        needed_umbr_options = (
+            "cv_col",
+            "N_max",
+            "nbins",
+            "outtemp",
+            "pot_ener_col",
+            "g",
+            "verbose",
+            "outfile",
+            "kB",
+            "units" "static_bias_col",
+        )
+
+        if umbr_options == None:
+            umbr_options = dict()
+        for option in needed_umbr_options:
+            if option not in needed_umbr_options:
+                umbr_options[option] = None
+
+        # Required Arguements (No Default Value)
+        if umbr_options["cv_col"] == None:
+            raise Exception("Must provide cv_col!")
+        else:
+            self.cv_col = umbr_options["cv_col"]
+
+        if umbr_options["N_max"] == None:
+            raise Exception("Must provide N_max!")
+        else:
+            self.N_max = umbr_options["N_max"]
+
+        if umbr_options["outtemp"] == None:
+            raise Exception("Must provide outtemp (in Kelvin)!")
+        else:
+            self.N_max = umbr_options["outtemp"]
+
+        if umbr_options["kB"] == None:
+            raise Exception("Must provide kB!")
+        else:
+            if istype(umbr_options["kB"], float):
+                self.kB = umbr_options["kB"]
+            else:
+                raise Exception("kB must be a float value!")
+
+        if umbr_options["units"] == None:
+            raise Exception("Must provide units!")
+        else:
+            if istype(umbr_options["units"], str):
+                self.units = umbr_options["units"]
+            else:
+                raise Exception(
+                    "units must be a string (just for clarifying in output files)!"
+                )
+
+        if umbr_options["nbins"] == None:
+            self.nbins = 100
+        else:
+            self.nbins = umbr_options["nbins"]
+
+        if umbr_options["pot_ener_col"] == None:
+            self.pot_ener_col = None
+            # if all temperatures are not all the same, must provide a potential energy column in COLVAR fikle
+            if not (np.all(self.temps == self.temps[0])):
+                raise Exception(
+                    "A column containing potential energy must be given when reweighting with simulations at different temperatures!"
+                )
+        else:
+            self.pot_ener_col = umbr_options["pot_ener_col"]
+
+        if umbr_options["verbose"] == None:
+            self.verbose = True
+        else:
+            self.verbose = umbr_options["verbose"]
+
+        if umbr_options["outfile"] == None:
+            self.outfile = "fes.dat"
+        else:
+            self.outfile = umbr_options["outfile"]
+
+        # we cannot procced if static_bias_col was not provided and an external bias file was
+        if self.static_bias_col == None and self.umbr_static_file == None:
+            if self.verbose:
+                print(
+                    "No static bias provided for this umbrella set, so no external bias used"
+                )
+            elif self.static_bias_col == None and self.umbr_static_file != None:
+                raise Exception(
+                    "A static bias column name must be provided in the case of reweighting an Umbrella Set. Will NOT use an external bias file directly."
+                )
+            elif self.static_bias_col != None and self.umbr_static_file == None:
+                if self.verbose:
+                    print(
+                        "A static bias column name was provided - will be used for reweighting."
+                    )
+            else:
+                if self.verbose:
+                    print(
+                        "Both a static bias column and an external bias file provided. No conflict, but will ONLY use static bias column name."
+                    )
+
+        # we want self.K but have self.num_im
+        self.K = self.num_im
+
+        # if g is a constant, lets fill the g_k array with it
+        # if g is a list or array, make sure it is correct length and if so make that the g_k array
+        # if g is None, then later we will use pymbar's timeseries module to calculate it
+        self.g = umbr_options["g"]
+        self.g_k = np.zeros([self.K])  # statistical inefficiency of simulation k
+        if self.g != None:
+            if isinstance(self.g, list) or isinstance(self.g, np.ndarray):
+                if len(self.g) != self.K:
+                    raise Exception(
+                        "g as an array/list must be of same length as number of total windows!"
+                    )
+                else:
+                    self.g_k[:] = self.g
+            else:
+                if not isinstance(self.g, int):
+                    raise Exception(
+                        "g must bean integer, an list/array of integers, or None"
+                    )
+                else:
+                    self.g_k[:] = self.g
+
+        # ------ Allocate Storage --------------------------------------------------------------
+        self.N_k = np.zeros(
+            [self.K], dtype=int
+        )  # N_k[k] is the number of snapshots from umbrella simulation k
+
+        self.restraint_k = np.zeros(
+            [self.K, 2]
+        )  # Retraint_k[k] is the Umbrella spring constant and center vals for simualtion k: r1, k1
+
+        self.cv_mat_kn = np.zeros(
+            [self.K, self.N_max]
+        )  # cv_mat_kn[k,n] is the CV value for snapshot n from umbrella simulation k
+        self.cv_mat_kn[:] = np.nan
+
+        self.u_kn = np.zeros(
+            [self.K, self.N_max]
+        )  # u_kn[k,n] is the reduced potential energy without umbrella restraints of snapshot n of umbrella simulation k (only needed if T is not constant)
+        self.u_kln = np.zeros(
+            [self.K, self.K, self.N_max]
+        )  # u_kln[k,l,n] is the reduced potential energy of snapshot n from umbrella simulation k evaluated at umbrella l
+        self.b_kln = np.zeros(
+            [self.K, self.K, self.N_max]
+        )  # b_kln[k,l,n] is the static bias of snapshot n (from umbrella simulation k) evaluated at umbrella l
+
+        # ------ Load Data --------------------------------------------------------------
+        if self.verbose:
+            print("Loading Data...")
+        self.cv_min = np.inf
+        self.cv_max = -np.inf
+
+        # we will first just load in the data for all images
+        for k in range(self.K):
+            set_id = self.K_digitize[k]
+            set_min_loc_in_K_digitize = np.where(self.K_digitize == set_id)[0][0]
+            image_in_set = k - set_min_loc_in_K_digitize
+            which_set = self.umbr_sets_keys[set_id]
+
+            cv_details = np.asarray(
+                [
+                    self.dict_umbr_sets[which_set].umbr_harm_locs[image_in_set],
+                    self.dict_umbr_sets[which_set].umbr_harm_ks[image_in_set],
+                ]
+            )
+            self.restraint_k[k, :] = cv_details
+
+            if self.dict_umbr_sets[which_set].file_type == "colvar":
+                df = read_colvar(
+                    self.dict_umbr_sets[which_set].cv_files[image_in_set],
+                    keep_zero=False,
+                )
+            if self.dict_umbr_sets[which_set].file_type == "df":
+                df = self.dict_umbr_sets[which_set].cv_files[image_in_set]
+            if self.dict_umbr_sets[which_set].file_type == "df_pkl":
+                df = pd.read_pickle(
+                    self.dict_umbr_sets[which_set].cv_files[image_in_set]
+                )
+            else:
+                raise Exception("This CV filetype has not been implemented!")
+
+            cv_vals = df[self.cv_col].to_numpy()
+            self.cv_mat_kn[k, 0 : len(cv_vals)] = cv_vals
+
+            if self.pot_ener_col:
+                self.u_kn[k, 0 : len(cv_vals)] = df[self.pot_ener_col].to_numpy()
+
+            if self.static_bias_col:
+                self.b_kln[k, 0 : len(cv_vals)] = df[self.static_bias_col].to_numpy()
+
+            # Subsample our data
+            # If g not provided, calculate statistical inefficiency
+            if g == None:
+                self.g_k[k] = timeseries.statistical_inefficiency(cv_vals)
+            # get indices of subsampled timeseries
+            indices = timeseries.subsample_correlated_data(
+                self.cv_mat_kn[k, 0 : len(cv_vals)], g=self.g_k[k]
+            )
+
+            # Subsample data.
+            self.N_k[k] = len(indices)
+            self.u_kn[k, 0 : self.N_k[k]] = self.u_kn[k, indices]
+            self.cv_mat_kn[k, 0 : self.N_k[k]] = self.cv_mat_kn[k, indices]
+
+            if self.verbose:
+                print(
+                    f"set {which_set} image {image_in_set}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
+                )
+
+            if np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]]) < self.cv_min:
+                self.cv_min = np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]])
+
+            if np.nanmax(self.cv_mat_kn[k, 0 : self.N_k[k]]) > self.cv_max:
+                self.cv_max = np.nanmax(self.cv_mat_kn[k, 0 : self.N_k[k]])
+
+        hist, bins = np.histogram(
+            self.cv_mat_kn,
+            bins=self.nbins,
+            range=(self.cv_min, self.cv_max),
+            density=False,
+        )
+        cv_min, cv_max = check_histogram(hist, bins)
+
+        # ------ Set Up For Final MBAR --------------------------------------------------------------
+        # Evaluate reduced energies in all umbrellas
+        if self.verbose:
+            print("Evaluating reduced potential energies...")
+        # Set zero of u_kn -- this is arbitrary.
+        self.u_kn -= self.u_kn.min()  # arbitrary up to a constant
+        eval_reduced_pot_energies(
+            self.N_k,
+            self.u_kln,
+            self.u_kn,
+            self.beta_k,
+            self.cv_mat_kn,
+            self.restraint_k,
+            self.b_kln,
+        )
+
+        # compute bin centers
+        bin_center_i = np.zeros([self.nbins])
+        bin_edges = np.linspace(cv_min, cv_max, self.nbins + 1)
+        for i in range(self.nbins):
+            bin_center_i[i] = 0.5 * (bin_edges[i] + bin_edges[i + 1])
+
+        N = np.sum(self.N_k)
+        cv_n = pymbar.utils.kn_to_n(self.cv_mat_kn, N_k=self.N_k)
+
+        # initialize free energy profile with the data collected
+        if self.verbose:
+            print("Creating FES Object...")
+
+        fes = pymbar.FES(self.u_kln, self.N_k, mbar_options=mbar_options)
+
+        # Compute free energy profile in unbiased potential (in units of kT).
+        histogram_parameters = {}
+        histogram_parameters["bin_edges"] = bin_edges
+
+        if self.verbose:
+            print("Generating FES...")
+        fes.generate_fes(
+            self.u_kn,
+            cv_n,
+            fes_type="histogram",
+            histogram_parameters=histogram_parameters,
+        )
+        results = fes.get_fes(
+            bin_center_i, reference_point="from-lowest", uncertainty_method="analytical"
+        )
+        center_f_i = kBT * results["f_i"]
+        center_df_i = kBT * results["df_i"]
+
+        # Write out free energy profile
+        text = f"# free energy profile from histogramming" + "\n"
+        text += f"# provided units: {self.units}" + "\n"
+        text += f"# provided value for kB: {self.kB}"
+        text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}"
+        text += f"{'bin':>8s} {'f':>8s} {'df':>8s}" + "\n"
+        for i in range(nbins):
+            text += (
+                f"{bin_center_i[i]:8.3f} {center_f_i[i]:8.3f} {center_df_i[i]:8.3f}"
+                + "\n"
+            )
+
+        if self.verbose:
+            print(text)
+
+        with open(self.outfile, "w") as f:
+            f.write(text)
 
 
 class umbrella_collection(object):
@@ -335,8 +635,8 @@ class umbrella_collection(object):
             cv_vals = df[self.cv_col].to_numpy()
             self.cv_mat_kn[k, 0 : len(cv_vals)] = cv_vals
 
-            if pot_ener_col:
-                self.u_kn[k, 0 : len(cv_vals)] = df[pot_ener_col].to_numpy()
+            if self.pot_ener_col:
+                self.u_kn[k, 0 : len(cv_vals)] = df[self.pot_ener_col].to_numpy()
 
             # Subsample our data
             # If g not provided, calculate statistical inefficiency
@@ -356,6 +656,37 @@ class umbrella_collection(object):
                 print(
                     f"set {which_set} image {image_in_set}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
                 )
+
+            # need to make sure the external bias file are provided.
+            # probably could check earlier in this loop, but I wantit to print after the information on this window
+            if (
+                self.dict_umbr_sets[which_set].static_bias_col == None
+                and self.dict_umbr_sets[which_set].umbr_static_file == None
+            ):
+                if self.verbose:
+                    print(
+                        "No static bias provided for this umbrella set, so no external bias used."
+                    )
+            elif (
+                self.dict_umbr_sets[which_set].static_bias_col == None
+                and sself.dict_umbr_sets[which_set].umbr_static_file != None
+            ):
+                if self.verbose:
+                    print(
+                        "An external bias file was provided - will be used for reweighting."
+                    )
+            elif (
+                self.dict_umbr_sets[which_set].static_bias_col != None
+                and self.dict_umbr_sets[which_set].umbr_static_file == None
+            ):
+                raise Exception(
+                    "An external bias file must be provided in the case of reweighting an Umbrella Set. Will NOT use an static bais column name."
+                )
+            else:
+                if self.verbose:
+                    print(
+                        "Both a static bias column and an external bias file provided. No conflict, but will ONLY use the external bias file."
+                    )
 
             if np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]]) < self.cv_min:
                 self.cv_min = np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]])
