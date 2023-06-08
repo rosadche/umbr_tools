@@ -13,7 +13,7 @@ import os
 import shutil
 
 from umbr_tools.misc_fxs import read_colvar
-from umbr_tools.reweighting_fxs import harmonic_umbrella_bias, eval_reduced_pot_energies
+from umbr_tools.reweighting_fxs import harmonic_umbrella_bias, eval_reduced_pot_energies_2d
 
 class umbrella_set_2d(object):
 
@@ -28,13 +28,21 @@ class umbrella_set_2d(object):
     
     def umbr_harm(self, x_locs, y_locs, k_x, k_y):
             
-            if not isinstance(umbr_harm_locs, (list, tuple, np.ndarray) ):
-                
-            if x_locs.ndim != 1:
-                raise Exception('x_locs must be 1d arrray!')
-            if y_locs.ndim != 1:
-                raise Exception('y_locs must be 1d arrray!')
-            if len(x_locs) != len(y_locs):
+            if not isinstance(x_locs, (list, tuple, np.ndarray) ):
+                 raise Exception('x_locs must be a list/arrray!')
+            else:
+                self.x_locs = np.asarray(x_locs)
+                if self.x_locs.ndim != 1:
+                    raise Exception('x_locs must be 1d arrray!')
+            
+            if not isinstance(y_locs, (list, tuple, np.ndarray) ):
+                 raise Exception('y_locs must be a list/arrray!')
+            else:
+                self.y_locs = np.asarray(y_locs)
+                if self.y_locs.ndim != 1:
+                    raise Exception('y_locs must be 1d arrray!')
+            
+            if len(self.x_locs) != len(self.y_locs):
                 raise Exception('y_locs and y_locs must be same length!')
             
             self.num_im = len(x_locs)
@@ -253,15 +261,24 @@ class umbrella_set_2d(object):
             [self.K], dtype=int
         )  # N_k[k] is the number of snapshots from umbrella simulation k
 
-        self.restraint_k = np.zeros(
+        self.restraint_x_k = np.zeros(
             [self.K, 2]
         )  # Retraint_k[k] is the Umbrella spring constant and center vals for simualtion k: r1, k1
-
-        self.cv_mat_kn = np.zeros(
+        
+        self.restraint_y_k = np.zeros(
+            [self.K, 2]
+        )  # Retraint_k[k] is the Umbrella spring constant and center vals for simualtion k: r1, k1
+        
+        self.cv_x_kn = np.zeros(
             [self.K, self.N_max]
         )  # cv_mat_kn[k,n] is the CV value for snapshot n from umbrella simulation k
-        self.cv_mat_kn[:] = np.nan
-
+        self.cv_x_kn[:] = np.nan
+        
+        self.cv_y_kn = np.zeros(
+            [self.K, self.N_max]
+        )  # cv_mat_kn[k,n] is the CV value for snapshot n from umbrella simulation k
+        self.cv_y_kn[:] = np.nan
+        
         self.u_kn = np.zeros(
             [self.K, self.N_max]
         )  # u_kn[k,n] is the reduced potential energy without umbrella restraints of snapshot n of umbrella simulation k (only needed if T is not constant)
@@ -275,19 +292,28 @@ class umbrella_set_2d(object):
         # ------ Load Data --------------------------------------------------------------
         if self.verbose:
             print("Loading Data...")
-        self.cv_min = np.inf
-        self.cv_max = -np.inf
+            
+        self.cv_min_x = np.inf
+        self.cv_max_x = -1.0 * np.inf
+        self.cv_min_y = np.inf
+        self.cv_max_y = -1.0 * np.inf
 
         # we will first just load in the data for all images
         for k in range(self.K):
-
-            cv_details = np.asarray(
+            
+            self.restraint_x_k[k, :] = np.asarray(
                 [
-                    self.umbr_harm_locs[k],
-                    self.umbr_harm_ks[k],
+                    self.umbr_harm_x_locs[k],
+                    self.umbr_harm_kxs[k],
                 ]
             )
-            self.restraint_k[k, :] = cv_details
+
+            self.restraint_y_k[k, :] = np.asarray(
+                [
+                    self.umbr_harm_y_locs[k],
+                    self.umbr_harm_kys[k],
+                ]
+            )
 
             if self.file_type == "colvar":
                 df = read_colvar(
@@ -303,19 +329,25 @@ class umbrella_set_2d(object):
             else:
                 raise Exception("This CV filetype has not been implemented!")
 
-            cv_vals = df[self.cv_col].to_numpy()
-            self.cv_mat_kn[k, 0 : len(cv_vals)] = cv_vals
-
+            cv_vals_x = df[self.cv_col_x].to_numpy()
+            self.cv_x_kn[k, 0 : len(cv_vals_x)] = cv_vals_x
+            
+            cv_vals_y = df[self.cv_col_y].to_numpy()
+            self.cv_y_kn[k, 0 : len(cv_vals_y)] = cv_vals_y
+            
             if self.pot_ener_col:
-                self.u_kn[k, 0 : len(cv_vals)] = df[self.pot_ener_col].to_numpy()
+                self.u_kn[k, 0 : len(cv_vals_x)] = df[self.pot_ener_col].to_numpy()
             
             if self.static_bias_col:
-                self.b_kln[k, :, 0 : len(cv_vals)] = df[self.static_bias_col].to_numpy()
+                self.b_kln[k, :, 0 : len(cv_vals_x)] = df[self.static_bias_col].to_numpy()
                 
             # Subsample our data
             # If g not provided, calculate statistical inefficiency
             if self.g == None:
-                self.g_k[k] = pymbar.timeseries.statistical_inefficiency(cv_vals)
+                g_x = pymbar.timeseries.statistical_inefficiency(cv_vals_x) # compute statistical inefficiency
+                g_y = pymbar.timeseries.statistical_inefficiency(cv_vals_y) # compute statistical inefficiency
+                self.g_k[k] = max(g_x, g_y)
+    
             # get indices of subsampled timeseries
             indices = pymbar.timeseries.subsample_correlated_data(
                 self.cv_mat_kn[k, 0 : len(cv_vals)], g=self.g_k[k]
@@ -324,25 +356,37 @@ class umbrella_set_2d(object):
             # Subsample data.
             self.N_k[k] = len(indices)
             self.u_kn[k, 0 : self.N_k[k]] = self.u_kn[k, indices]
-            self.cv_mat_kn[k, 0 : self.N_k[k]] = self.cv_mat_kn[k, indices]
+            self.cv_x_kn[k, 0 : self.N_k[k]]    = cv_vals_x[indices]
+            self.cv_y_kn[k, 0 : self.N_k[k]]    = cv_vals_y[indices]
 
             if self.verbose:
                 print(
                     f"image {k}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
                 )
 
-            if np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]]) < self.cv_min:
-                self.cv_min = np.nanmin(self.cv_mat_kn[k, 0 : self.N_k[k]])
-
-            if np.nanmax(self.cv_mat_kn[k, 0 : self.N_k[k]]) > self.cv_max:
-                self.cv_max = np.nanmax(self.cv_mat_kn[k, 0 : self.N_k[k]])
-
-        hist, bins = np.histogram(
-            self.cv_mat_kn,
-            bins=self.nbins,
-            range=(self.cv_min, self.cv_max),
-            density=False,
-        )
+            if np.nanmin(self.cv_x_kn[k, 0 : N_k[k]]) < self.cv_min_x:
+                self.cv_min_x = np.nanmin(self.cv_x_kn[k, 0 : N_k[k]])
+            
+            if np.nanmax(cv_x_kn[k, 0 : N_k[k]]) > self.cv_max_x:
+                self.cv_max_x = np.nanmax(self.cv_x_kn[k, 0 : N_k[k]])
+                
+            if np.nanmin(cv_y_kn[k, 0 : N_k[k]]) < self.cv_min_y:
+                self.cv_min_y = np.nanmin(self.cv_y_kn[k, 0 : N_k[k]])
+            
+            if np.nanmax(cv_y_kn[k, 0 : N_k[k]]) > self.cv_max_y:
+                self.cv_max_y = np.nanmax(self.cv_y_kn[k, 0 : N_k[k]])
+            
+            if self.verbose:
+                print("Creating 2D Histogram Bins...")
+            
+            hist_counts, xedges, yedges = np.histogram2d(cv_x_kn.ravel(), cv_y_kn.ravel(), bins=(self.nbins[0], self.nbins[1]), range=[[cv_min_x, cv_max_x], [cv_min_y, cv_max_y]], density=False)
+            centers_x = 0.5 * (xedges[1:] + xedges[:-1])
+            centers_y = 0.5 * (yedges[1:] + yedges[:-1])
+            
+            # restart here
+            bin_edges = []
+            bin_edges.append( xedges )
+            bin_edges.append( yedges )
 
         # ------ Set Up For Final MBAR --------------------------------------------------------------
         # Evaluate reduced energies in all umbrellas
@@ -350,7 +394,7 @@ class umbrella_set_2d(object):
             print("Evaluating reduced potential energies...")
         # Set zero of u_kn -- this is arbitrary.
         self.u_kn -= self.u_kn.min()  # arbitrary up to a constant
-        eval_reduced_pot_energies(
+        eval_reduced_pot_energies_2d(
             self.N_k,
             self.u_kln,
             self.u_kn,
@@ -754,7 +798,7 @@ class umbrella_collection_1d(object):
             print("Evaluating reduced potential energies...")
         # Set zero of u_kn -- this is arbitrary.
         self.u_kn -= self.u_kn.min()  # arbitrary up to a constant
-        eval_reduced_pot_energies(
+        eval_reduced_pot_energies_2d(
             self.N_k,
             self.u_kln,
             self.u_kn,
