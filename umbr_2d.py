@@ -146,9 +146,17 @@ class umbrella_set_2d(object):
 
         # Required Arguements (No Default Value)
         if umbr_options["cv_col"] == None:
-            raise Exception("Must provide cv_col!")
+            raise Exception("cv_col must be provided")
         else:
-            self.cv_col = umbr_options["cv_col"]
+            if isinstance(umbr_options["cv_col"], (list, tuple, np.ndarray)):
+                if len(umbr_options["cv_col"]) != 2:
+                    raise Exception(
+                        "cv_col must be a list/array of length 2!"
+                    )
+                else:
+                    self.cv_col = umbr_options["cv_col"]
+            else:
+                raise Exception("cv_col must be a list/array!")
 
         if umbr_options["N_max"] == None:
             raise Exception("Must provide N_max!")
@@ -177,14 +185,21 @@ class umbrella_set_2d(object):
                 raise Exception(
                     "units must be a string (just for clarifying in output files)!"
                 )
+        
+        if umbr_options["verbose"] == None:
+            self.verbose = True
+        else:
+            self.verbose = umbr_options["verbose"]
             
         if umbr_options["nbins"] == None:
             self.nbins = (25, 25)
+            if self.verbose:
+                print(f"nbins not provided so set to {self.nbins}")
         else:
             if isinstance(umbr_options["nbins"], (list, tuple, np.ndarray)):
                 if len(umbr_options["nbins"]) != 2:
                     raise Exception(
-                        "nbins must be a two dimensional list/array!"
+                        "nbins must be a must be a list/array of length 2!"
                     )
                 else:
                     self.nbins = umbr_options["nbins"]
@@ -200,11 +215,6 @@ class umbrella_set_2d(object):
                 )
         else:
             self.pot_ener_col = umbr_options["pot_ener_col"]
-
-        if umbr_options["verbose"] == None:
-            self.verbose = True
-        else:
-            self.verbose = umbr_options["verbose"]
 
         if umbr_options["outfile"] == None:
             self.outfile = "fes.dat"
@@ -329,10 +339,10 @@ class umbrella_set_2d(object):
             else:
                 raise Exception("This CV filetype has not been implemented!")
 
-            cv_vals_x = df[self.cv_col_x].to_numpy()
+            cv_vals_x = df[self.cv_col[0]].to_numpy()
             self.cv_x_kn[k, 0 : len(cv_vals_x)] = cv_vals_x
             
-            cv_vals_y = df[self.cv_col_y].to_numpy()
+            cv_vals_y = df[self.cv_col[1]].to_numpy()
             self.cv_y_kn[k, 0 : len(cv_vals_y)] = cv_vals_y
             
             if self.pot_ener_col:
@@ -350,7 +360,7 @@ class umbrella_set_2d(object):
     
             # get indices of subsampled timeseries
             indices = pymbar.timeseries.subsample_correlated_data(
-                self.cv_mat_kn[k, 0 : len(cv_vals)], g=self.g_k[k]
+                self.cv_x_kn[k, 0 : len(cv_vals_x)], g=self.g_k[k]
             )
 
             # Subsample data.
@@ -364,49 +374,48 @@ class umbrella_set_2d(object):
                     f"image {k}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"
                 )
 
-            if np.nanmin(self.cv_x_kn[k, 0 : N_k[k]]) < self.cv_min_x:
-                self.cv_min_x = np.nanmin(self.cv_x_kn[k, 0 : N_k[k]])
+            if np.nanmin(self.cv_x_kn[k, 0 : self.N_k[k]]) < self.cv_min_x:
+                self.cv_min_x = np.nanmin(self.cv_x_kn[k, 0 : self.N_k[k]])
             
-            if np.nanmax(cv_x_kn[k, 0 : N_k[k]]) > self.cv_max_x:
-                self.cv_max_x = np.nanmax(self.cv_x_kn[k, 0 : N_k[k]])
+            if np.nanmax(self.cv_x_kn[k, 0 : self.N_k[k]]) > self.cv_max_x:
+                self.cv_max_x = np.nanmax(self.cv_x_kn[k, 0 : self.N_k[k]])
                 
-            if np.nanmin(cv_y_kn[k, 0 : N_k[k]]) < self.cv_min_y:
-                self.cv_min_y = np.nanmin(self.cv_y_kn[k, 0 : N_k[k]])
+            if np.nanmin(self.cv_y_kn[k, 0 : self.N_k[k]]) < self.cv_min_y:
+                self.cv_min_y = np.nanmin(self.cv_y_kn[k, 0 : self.N_k[k]])
             
-            if np.nanmax(cv_y_kn[k, 0 : N_k[k]]) > self.cv_max_y:
-                self.cv_max_y = np.nanmax(self.cv_y_kn[k, 0 : N_k[k]])
+            if np.nanmax(self.cv_y_kn[k, 0 : self.N_k[k]]) > self.cv_max_y:
+                self.cv_max_y = np.nanmax(self.cv_y_kn[k, 0 : self.N_k[k]])
             
-            if self.verbose:
-                print("Creating 2D Histogram Bins...")
+        if self.verbose:
+            print("Creating 2D Histogram Bins...")
             
-            hist_counts, xedges, yedges = np.histogram2d(cv_x_kn.ravel(), cv_y_kn.ravel(), bins=(self.nbins[0], self.nbins[1]), range=[[cv_min_x, cv_max_x], [cv_min_y, cv_max_y]], density=False)
-            centers_x = 0.5 * (xedges[1:] + xedges[:-1])
-            centers_y = 0.5 * (yedges[1:] + yedges[:-1])
-            
-            # restart here
-            bin_edges = []
-            bin_edges.append( xedges )
-            bin_edges.append( yedges )
-            
-            non_zero_indices      = np.nonzero(hist_counts)
-            bins_nonzero          = len(non_zero_indices[0])
-            centers_x_nonzero     = centers_x[non_zero_indices[0]]
-            centers_y_nonzero     = centers_y[non_zero_indices[1]]
-            centers_nonzero       = np.vstack((centers_x_nonzero, centers_y_nonzero)).T
-            
-            if self.verbose:
-                print(f"{bins_nonzero:d} bins were populated out of {len(hist_counts.ravel())} (for full rectilinear 2d grid)")
-                for i in range(bins_nonzero):
-                    print(f"bin {i:>5} ({centers_nonzero[i][0]:6.1f}, {centers_nonzero[i][1]:6.1f}) {hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]:12f} conformations")
-            
-            
-            x_n = np.zeros([np.sum(N_k), 2])  # the configurations
-            Ntot = 0
-            for k in range(K):
-                for n in range(N_k[k]):
-                    x_n[Ntot, 0] = cv_x_kn[k, n]
-                    x_n[Ntot, 1] = cv_y_kn[k, n]
-                    Ntot += 1
+        hist_counts, xedges, yedges = np.histogram2d(self.cv_x_kn.ravel(), self.cv_y_kn.ravel(), bins=(self.nbins[0], self.nbins[1]), range=[[self.cv_min_x, self.cv_max_x], [self.cv_min_y, self.cv_max_y]], density=False)
+        centers_x = 0.5 * (xedges[1:] + xedges[:-1])
+        centers_y = 0.5 * (yedges[1:] + yedges[:-1])
+        
+        # restart here
+        bin_edges = []
+        bin_edges.append( xedges )
+        bin_edges.append( yedges )
+        
+        non_zero_indices      = np.nonzero(hist_counts)
+        bins_nonzero          = len(non_zero_indices[0])
+        centers_x_nonzero     = centers_x[non_zero_indices[0]]
+        centers_y_nonzero     = centers_y[non_zero_indices[1]]
+        centers_nonzero       = np.vstack((centers_x_nonzero, centers_y_nonzero)).T
+        
+        if self.verbose:
+            print(f"{bins_nonzero:d} bins were populated out of {len(hist_counts.ravel())} (for full rectilinear 2d grid)")
+            for i in range(bins_nonzero):
+                print(f"bin {i:>5} ({centers_nonzero[i][0]:4.1f}, {centers_nonzero[i][1]:4.1f}) {int(hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]):10d} conformations")
+        
+        x_n = np.zeros([np.sum(self.N_k), 2])  # the configurations
+        Ntot = 0
+        for k in range(self.K):
+            for n in range(self.N_k[k]):
+                x_n[Ntot, 0] = self.cv_x_kn[k, n]
+                x_n[Ntot, 1] = self.cv_y_kn[k, n]
+                Ntot += 1
         
 
         # ------ Set Up For Final MBAR --------------------------------------------------------------
@@ -426,9 +435,6 @@ class umbrella_set_2d(object):
             self.restraint_y_k,
             self.b_kln,
         )
-
-        N = np.sum(self.N_k)
-        cv_n = pymbar.utils.kn_to_n(self.cv_mat_kn, N_k=self.N_k)
 
         # initialize free energy profile with the data collected
         if self.verbose:
@@ -459,9 +465,9 @@ class umbrella_set_2d(object):
         text += f"# provided units: {self.units}" + "\n"
         text += f"# provided value for kB: {self.kB} {self.units}/K" + "\n"
         text += f"# provided T={self.outtemp} K, resulitng in kT={self.kT} {self.units}" + "\n"
-        text += f"{'bin':>8s} {cv_col_x:>10s} {cv_col_y:>10s} {'N':>8s} {'f':>10s} {'df':>10s}" + "\n"
+        text += f"{'bin':>8s} {self.cv_col[0]:>10s} {self.cv_col[1]:>10s} {'N':>8s} {'f':>10s} {'df':>10s}" + "\n"
         for i in range(bins_nonzero):
-            text += f"{i:>8d} {centers_nonzero[i][0]:>10.3f} {centers_nonzero[i][1]:>10.3f} {hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]:>8.0f} {f_i[i]:>10.3f} {df_i[i]:>10.3f}" + "\n"
+            text += f"{i:>8d} {centers_nonzero[i][0]:>10.3f} {centers_nonzero[i][1]:>10.3f} {hist_counts[non_zero_indices[0][i], non_zero_indices[1][i]]:>8.0f} {center_f_i[i]:>10.3f} {center_df_i[i]:>10.3f}" + "\n"
 
         if self.verbose:
             print(text)
@@ -521,7 +527,7 @@ class umbrella_collection_2d(object):
         # write a fake COLVAR file concatenating all CVs from all simulations
         # but in order so we can use the biases easily
         colvar_file = "COLVAR_fake"
-        colvar_txt = f"#! FIELDS time {self.cv_col}" + "\n"
+        colvar_txt = f"#! FIELDS time {self.cv_col[0]}" + "\n"
         for k in range(self.K):
             for n in range(self.N_k[k]):
                 colvar_txt += f"0.0 {self.cv_mat_kn[k,n]}" + "\n"

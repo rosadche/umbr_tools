@@ -151,9 +151,16 @@ class umbrella_set_1d(object):
                 raise Exception(
                     "units must be a string (just for clarifying in output files)!"
                 )
+        
+        if umbr_options["verbose"] == None:
+            self.verbose = True
+        else:
+            self.verbose = umbr_options["verbose"]
             
         if umbr_options["nbins"] == None:
             self.nbins = 100
+            if self.verbose:
+                print(f"nbins not provided so set to {self.nbins}")
         else:
             self.nbins = umbr_options["nbins"]
 
@@ -167,10 +174,6 @@ class umbrella_set_1d(object):
         else:
             self.pot_ener_col = umbr_options["pot_ener_col"]
 
-        if umbr_options["verbose"] == None:
-            self.verbose = True
-        else:
-            self.verbose = umbr_options["verbose"]
 
         if umbr_options["outfile"] == None:
             self.outfile = "fes.dat"
@@ -528,8 +531,15 @@ class umbrella_collection_1d(object):
             self.outtemp = umbr_options["outtemp"]
 
         # Optional Arguements (Default Values)
+        if umbr_options["verbose"] == None:
+            self.verbose = True
+        else:
+            self.verbose = umbr_options["verbose"]
+            
         if umbr_options["nbins"] == None:
             self.nbins = 100
+            if self.verbose:
+                print(f"nbins not provided so set to {self.nbins}")
         else:
             self.nbins = umbr_options["nbins"]
 
@@ -542,11 +552,6 @@ class umbrella_collection_1d(object):
                 )
         else:
             self.pot_ener_col = umbr_options["pot_ener_col"]
-
-        if umbr_options["verbose"] == None:
-            self.verbose = True
-        else:
-            self.verbose = umbr_options["verbose"]
 
         if umbr_options["outfile"] == None:
             self.outfile = "fes.dat"
