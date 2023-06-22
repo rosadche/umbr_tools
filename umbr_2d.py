@@ -225,16 +225,16 @@ class umbrella_set_2d(object):
         if self.static_bias_col == None and self.umbr_static_file == None:
             if self.verbose:
                 print("No static bias provided for this umbrella set, so no external bias used")
-            elif self.static_bias_col == None and self.umbr_static_file != None:
-                raise Exception(
-                            "A static bias column name must be provided in the case of reweighting an Umbrella Set. Will NOT use an external bias file directly."
-                        )
-            elif self.static_bias_col != None and self.umbr_static_file == None:
-                if self.verbose:
-                    print("A static bias column name was provided - will be used for reweighting.")
-            else:
-                if self.verbose:
-                    print("Both a static bias column and an external bias file provided. No conflict, but will ONLY use static bias column name.")
+        elif self.static_bias_col == None and self.umbr_static_file != None:
+            raise Exception(
+                        "A static bias column name must be provided in the case of reweighting an Umbrella Set. Will NOT use an external bias file directly."
+                    )
+        elif self.static_bias_col != None and self.umbr_static_file == None:
+            if self.verbose:
+                print("A static bias column name was provided - will be used for reweighting.")
+        else:
+            if self.verbose:
+                print("Both a static bias column and an external bias file provided. No conflict, but will ONLY use static bias column name.")
                 
         
         # need to setup KT at outtemp
@@ -347,9 +347,6 @@ class umbrella_set_2d(object):
             
             if self.pot_ener_col:
                 self.u_kn[k, 0 : len(cv_vals_x)] = df[self.pot_ener_col].to_numpy()
-            
-            if self.static_bias_col:
-                self.b_kln[k, :, 0 : len(cv_vals_x)] = df[self.static_bias_col].to_numpy()
                 
             # Subsample our data
             # If g not provided, calculate statistical inefficiency
@@ -368,7 +365,9 @@ class umbrella_set_2d(object):
             self.u_kn[k, 0 : self.N_k[k]] = self.u_kn[k, indices]
             self.cv_x_kn[k, 0 : self.N_k[k]]    = cv_vals_x[indices]
             self.cv_y_kn[k, 0 : self.N_k[k]]    = cv_vals_y[indices]
-
+            if self.static_bias_col:
+                self.b_kln[k, :, 0 : self.N_k[k]] = df[self.static_bias_col].to_numpy()[indices]
+                
             if self.verbose:
                 print(
                     f"image {k}: stat_ineff={self.g_k[k]} for {self.N_k[k]} frames"

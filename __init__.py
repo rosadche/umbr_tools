@@ -29,6 +29,7 @@ __email__ = "rosadche@bu.edu"
 
 from .umbr_1d import *
 from .umbr_2d import *
+from .plumed_inputs import *
 from . import misc_fxs, reweighting_fxs
 
 __all__ = [
