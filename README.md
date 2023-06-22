@@ -15,3 +15,6 @@ If you have just a single external bias and no harmonic biases, you can use a si
 
 Some potential issues:
 1. If the gradient during MBAR initialization is nan, so will all the f_k free energies for each state. This will crash the FES histogramming downstream. This happens if the data has EVEN A SINGLE nan value. This is why the read_colvar has functions has the nan_handling option: "exception" raises an exception if nan are found (default), "drop" drops rows with any nan values. However, you should probably go back and look at your data manually. If this functions options are insufficient, please load the data into a Pandas dataframe manually and use that for MBAR once you have rectified the issue. One reason this occured for me: a simulation with PLUMED ended due to the job's allotted time being reached and being killed by the job scheduler. This left a half written line. In cases where the simualtion has not been restarted, this should be easy ti see at the end of the file. If the simualtion has been restarted, the PLUMED column name line will continue on this incomplete data line, making it harder to see.
+
+Future work:
+1. Seperate histogramming from the reweighting states & generalize the biasing and histogramming inputs. This will more easily allow 1d biases to be projected onto two dimensions, or 2d bias projected onto one dimensions.
